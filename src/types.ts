@@ -14,7 +14,7 @@ export type Match = {
   away_team: string
   home_goals: number | null
   away_goals: number | null
-  status: 'scheduled' | 'live' | 'finished'
+  status: "scheduled" | "live" | "finished"
   created_at: string
   updated_at: string
 }

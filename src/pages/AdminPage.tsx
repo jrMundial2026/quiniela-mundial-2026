@@ -1,14 +1,13 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { getMatchStatusClass, getMatchStatusLabel } from '../lib/matchStatus'
 import { getOutcomeLabel } from '../lib/scoring'
-import { getTeamFlagEmoji } from '../lib/teamFlags'
+import { WORLD_CUP_GROUPS, WORLD_CUP_ROUNDS, isGroupStageRound, normalizeRoundValue } from '../lib/worldcup'
 import type { Match, Player, Prediction, PredictionOutcome } from '../types'
 
 const emptyMatch = {
   id: '',
-  round: '',
-  group_letter: '',
+  round: 'Fase de grupos',
+  group_letter: 'A',
   kickoff_at: '',
   home_team: '',
   away_team: '',
@@ -24,26 +23,19 @@ const emptyPrediction = {
   prediction_result: '' as '' | PredictionOutcome,
 }
 
-const roundOptions = [
-  'Fase de grupos',
-  'Dieciseisavos de final',
-  'Octavos de final',
-  'Cuartos de final',
-  'Semifinal',
-  'Final',
-]
-
-const groupOptions = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
-
-function isGroupRound(round?: string | null) {
-  return round === 'Fase de grupos'
-}
-
 function splitBulkEntries(value: string) {
   return value
     .split(/[\n,]+/)
     .map((entry) => entry.trim())
     .filter(Boolean)
+}
+
+function getMatchRoundPayload(round: string | null | undefined) {
+  return normalizeRoundValue(round)
+}
+
+function isGroupStage(round: string | null | undefined) {
+  return isGroupStageRound(round)
 }
 
 function Modal({
@@ -88,8 +80,6 @@ export default function AdminPage() {
   const [bulkPlayers, setBulkPlayers] = useState('')
   const [matchForm, setMatchForm] = useState(emptyMatch)
   const [predictionForm, setPredictionForm] = useState(emptyPrediction)
-  const [predictionPlayerIds, setPredictionPlayerIds] = useState<string[]>([])
-  const [predictionPlayerQuery, setPredictionPlayerQuery] = useState('')
   const [playerQuery, setPlayerQuery] = useState('')
   const [matchQuery, setMatchQuery] = useState('')
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null)
@@ -146,16 +136,9 @@ export default function AdminPage() {
 
   const playerMap = useMemo(() => new Map(players.map((player) => [player.id, player.name] as const)), [players])
   const matchMap = useMemo(
-    () =>
-      new Map(
-        matches.map((match) => [
-          match.id,
-          `${getTeamFlagEmoji(match.home_team)} ${match.home_team} vs ${getTeamFlagEmoji(match.away_team)} ${match.away_team}`,
-        ] as const)
-      ),
+    () => new Map(matches.map((match) => [match.id, `${match.home_team} vs ${match.away_team}`] as const)),
     [matches]
   )
-  const activePlayers = useMemo(() => players.filter((player) => player.active), [players])
 
   const filteredPlayers = useMemo(() => {
     const term = playerQuery.trim().toLowerCase()
@@ -171,26 +154,6 @@ export default function AdminPage() {
       return haystack.includes(term)
     })
   }, [matches, matchQuery])
-
-  const filteredPredictionPlayers = useMemo(() => {
-    const term = predictionPlayerQuery.trim().toLowerCase()
-    if (!term) return activePlayers
-    return activePlayers.filter((player) => player.name.toLowerCase().includes(term))
-  }, [activePlayers, predictionPlayerQuery])
-
-  function togglePredictionPlayer(playerId: string) {
-    setPredictionPlayerIds((current) =>
-      current.includes(playerId) ? current.filter((id) => id !== playerId) : [...current, playerId]
-    )
-  }
-
-  function selectVisiblePredictionPlayers() {
-    setPredictionPlayerIds(filteredPredictionPlayers.map((player) => player.id))
-  }
-
-  function clearPredictionPlayers() {
-    setPredictionPlayerIds([])
-  }
 
   async function handleLogin(e: FormEvent) {
     e.preventDefault()
@@ -233,7 +196,7 @@ export default function AdminPage() {
   }
 
   async function addBulkPlayers() {
-    const names = Array.from(new Set(splitBulkEntries(bulkPlayers)))
+    const names = splitBulkEntries(bulkPlayers)
 
     if (names.length === 0) return
     setAuthError(null)
@@ -297,9 +260,10 @@ export default function AdminPage() {
 
   async function saveMatch(e: FormEvent) {
     e.preventDefault()
+    const normalizedRound = getMatchRoundPayload(matchForm.round)
     const payload = {
-      round: matchForm.round.trim() || null,
-      group_letter: isGroupRound(matchForm.round) ? (matchForm.group_letter?.trim().toUpperCase() || null) : null,
+      round: normalizedRound,
+      group_letter: isGroupStage(normalizedRound) ? (matchForm.group_letter || 'A').trim().toUpperCase() : null,
       kickoff_at: matchForm.kickoff_at ? new Date(matchForm.kickoff_at).toISOString() : null,
       home_team: matchForm.home_team.trim(),
       away_team: matchForm.away_team.trim(),
@@ -325,16 +289,21 @@ export default function AdminPage() {
   }
 
   function openMatchEditor(match: Match) {
-    setEditingMatch({ ...match })
+    setEditingMatch({
+      ...match,
+      round: getMatchRoundPayload(match.round),
+      group_letter: match.group_letter ?? 'A',
+    })
   }
 
   async function saveMatchEdit(e: FormEvent) {
     e.preventDefault()
     if (!editingMatch) return
 
+    const normalizedRound = getMatchRoundPayload(editingMatch.round)
     const payload = {
-      round: editingMatch.round?.trim() || null,
-      group_letter: isGroupRound(editingMatch.round) ? editingMatch.group_letter?.trim().toUpperCase() || null : null,
+      round: normalizedRound,
+      group_letter: isGroupStage(normalizedRound) ? (editingMatch.group_letter || 'A').trim().toUpperCase() : null,
       kickoff_at: editingMatch.kickoff_at ? new Date(editingMatch.kickoff_at).toISOString() : null,
       home_team: editingMatch.home_team.trim(),
       away_team: editingMatch.away_team.trim(),
@@ -369,24 +338,18 @@ export default function AdminPage() {
 
   async function savePrediction(e: FormEvent) {
     e.preventDefault()
-
-    const selectedPlayerIds = predictionPlayerIds.length > 0 ? predictionPlayerIds : predictionForm.player_id ? [predictionForm.player_id] : []
-    if (selectedPlayerIds.length === 0 || !predictionForm.match_id || !predictionForm.prediction_result) return
-
-    const payload = selectedPlayerIds.map((playerId) => ({
-      player_id: playerId,
+    if (!predictionForm.player_id || !predictionForm.match_id || !predictionForm.prediction_result) return
+    const payload = {
+      player_id: predictionForm.player_id,
       match_id: predictionForm.match_id,
       prediction_result: predictionForm.prediction_result,
-    }))
-
+    }
     setAuthError(null)
     setBusy(true)
     const { error } = await supabase.from('predictions').upsert(payload, { onConflict: 'player_id,match_id' })
     setBusy(false)
     if (!error) {
       setPredictionForm(emptyPrediction)
-      setPredictionPlayerIds([])
-      setPredictionPlayerQuery('')
       await refreshData()
     } else {
       setAuthError(error.message)
@@ -512,18 +475,8 @@ export default function AdminPage() {
             <div className="row-2">
               <label>
                 Ronda
-                <select
-                  value={matchForm.round}
-                  onChange={(e) =>
-                    setMatchForm((p) => ({
-                      ...p,
-                      round: e.target.value,
-                      group_letter: e.target.value === 'Fase de grupos' ? p.group_letter : '',
-                    }))
-                  }
-                >
-                  <option value="">Selecciona</option>
-                  {roundOptions.map((round) => (
+                <select value={matchForm.round} onChange={(e) => setMatchForm((p) => ({ ...p, round: e.target.value, group_letter: e.target.value === 'Fase de grupos' ? p.group_letter || 'A' : '' }))}>
+                  {WORLD_CUP_ROUNDS.map((round) => (
                     <option key={round} value={round}>{round}</option>
                   ))}
                 </select>
@@ -533,18 +486,17 @@ export default function AdminPage() {
                 <input type="datetime-local" value={matchForm.kickoff_at} onChange={(e) => setMatchForm((p) => ({ ...p, kickoff_at: e.target.value }))} />
               </label>
             </div>
-            {isGroupRound(matchForm.round) ? (
+            {isGroupStage(matchForm.round) ? (
               <div className="row-2">
                 <label>
                   Grupo
                   <select value={matchForm.group_letter} onChange={(e) => setMatchForm((p) => ({ ...p, group_letter: e.target.value }))}>
-                    <option value="">Selecciona</option>
-                    {groupOptions.map((group) => (
+                    {WORLD_CUP_GROUPS.map((group) => (
                       <option key={group} value={group}>Grupo {group}</option>
                     ))}
                   </select>
                 </label>
-                <div className="selection-summary">Solo aplica a la fase de grupos</div>
+                <div />
               </div>
             ) : null}
             <div className="row-2">
@@ -592,19 +544,8 @@ export default function AdminPage() {
               filteredMatches.map((match) => (
                 <div key={match.id} className="mini-item">
                   <div>
-                    <strong>
-                      <span className="team-flag" aria-hidden="true">{getTeamFlagEmoji(match.home_team)}</span>
-                      {match.home_team} vs {match.away_team}
-                      <span className="team-flag" aria-hidden="true">{getTeamFlagEmoji(match.away_team)}</span>
-                    </strong>
-                    <span>
-                      {match.round ?? 'Sin ronda'}
-                      {match.round === 'Fase de grupos' && match.group_letter ? ` · Grupo ${match.group_letter}` : ''}
-                      {' · '}
-                      {match.home_goals === null || match.away_goals === null ? 'Pendiente' : `${match.home_goals}-${match.away_goals}`}
-                      {' · '}
-                      {getMatchStatusLabel(match.status)}
-                    </span>
+                    <strong>{match.home_team} vs {match.away_team}</strong>
+                    <span>{match.round ?? 'Sin ronda'} · {match.home_goals === null || match.away_goals === null ? 'Pendiente' : `${match.home_goals}-${match.away_goals}`} · {match.status === 'scheduled' ? 'Pendiente' : match.status === 'live' ? 'En vivo' : 'Finalizado'}</span>
                   </div>
                   <div className="inline-actions">
                     <button disabled={busy} onClick={() => openMatchEditor(match)} type="button">Editar</button>
@@ -627,66 +568,26 @@ export default function AdminPage() {
         </div>
 
         <form className="form-grid" onSubmit={savePrediction}>
-          <div className="selection-header">
-            <div>
-              <h3>Jugadores</h3>
-              <p>Selecciona uno o varios jugadores para guardar el mismo pronóstico.</p>
-            </div>
-            <div className="selection-tools">
-              <button type="button" className="ghost-button" onClick={selectVisiblePredictionPlayers}>Seleccionar visibles</button>
-              <button type="button" className="ghost-button" onClick={clearPredictionPlayers}>Limpiar</button>
-            </div>
-          </div>
           <div className="row-2">
             <label>
-              Buscar jugador
-              <input
-                value={predictionPlayerQuery}
-                onChange={(e) => setPredictionPlayerQuery(e.target.value)}
-                placeholder="Filtra por nombre"
-              />
+              Jugador
+              <select value={predictionForm.player_id} onChange={(e) => setPredictionForm((p) => ({ ...p, player_id: e.target.value }))}>
+                <option value="">Selecciona</option>
+                {players.map((player) => (
+                  <option key={player.id} value={player.id}>{player.name}</option>
+                ))}
+              </select>
             </label>
             <label>
               Partido
               <select value={predictionForm.match_id} onChange={(e) => setPredictionForm((p) => ({ ...p, match_id: e.target.value }))}>
                 <option value="">Selecciona</option>
                 {matches.map((match) => (
-                  <option key={match.id} value={match.id}>{getTeamFlagEmoji(match.home_team)} {match.home_team} vs {getTeamFlagEmoji(match.away_team)} {match.away_team}</option>
+                  <option key={match.id} value={match.id}>{match.home_team} vs {match.away_team}</option>
                 ))}
               </select>
             </label>
           </div>
-
-          <div className="selection-summary">
-            {predictionPlayerIds.length > 0
-              ? `${predictionPlayerIds.length} jugador${predictionPlayerIds.length === 1 ? '' : 'es'} seleccionados`
-              : 'No hay jugadores seleccionados'}
-          </div>
-
-          <div className="player-pick-grid scroll-box tall-compact">
-            {filteredPredictionPlayers.length === 0 ? (
-              <div className="empty-row">No hay jugadores activos con ese filtro.</div>
-            ) : (
-              filteredPredictionPlayers.map((player) => {
-                const selected = predictionPlayerIds.includes(player.id)
-                return (
-                  <button
-                    key={player.id}
-                    type="button"
-                    className={`player-pick-item ${selected ? 'selected' : ''}`}
-                    onClick={() => togglePredictionPlayer(player.id)}
-                  >
-                    <span className="player-check">{selected ? '✓' : ''}</span>
-                    <span className="player-pick-name">
-                      <strong>{player.name}</strong>
-                      <span>{player.active ? 'Activo' : 'Inactivo'}</span>
-                    </span>
-                  </button>
-                )
-              })
-            )}
-          </div>
-
           <label>
             Pronóstico
             <select value={predictionForm.prediction_result} onChange={(e) => setPredictionForm((p) => ({ ...p, prediction_result: e.target.value as '' | PredictionOutcome }))}>
@@ -696,7 +597,7 @@ export default function AdminPage() {
               <option value="AWAY">Gana visita</option>
             </select>
           </label>
-          <button disabled={busy} type="submit">{predictionPlayerIds.length > 1 ? 'Guardar pronósticos' : 'Guardar pronóstico'}</button>
+          <button disabled={busy} type="submit">Guardar pronóstico</button>
         </form>
 
         <div className="mini-list scroll-box tall-compact">
@@ -710,7 +611,7 @@ export default function AdminPage() {
                   <span>{matchMap.get(pred.match_id) ?? 'Partido borrado'} · {getOutcomeLabel(pred.prediction_result)}</span>
                 </div>
                 <div className="inline-actions">
-                  <button disabled={busy} onClick={() => { setPredictionForm({ id: pred.id, player_id: pred.player_id, match_id: pred.match_id, prediction_result: pred.prediction_result ?? '' }); setPredictionPlayerIds([pred.player_id]); setPredictionPlayerQuery('') }} type="button">Editar</button>
+                  <button disabled={busy} onClick={() => setPredictionForm({ id: pred.id, player_id: pred.player_id, match_id: pred.match_id, prediction_result: pred.prediction_result ?? '' })} type="button">Editar</button>
                   <button disabled={busy} onClick={() => deletePrediction(pred)} type="button">Borrar</button>
                 </div>
               </div>
@@ -748,22 +649,8 @@ export default function AdminPage() {
             <div className="row-2">
               <label>
                 Ronda
-                <select
-                  value={editingMatch.round ?? ''}
-                  onChange={(e) =>
-                    setEditingMatch((p) =>
-                      p
-                        ? {
-                            ...p,
-                            round: e.target.value,
-                            group_letter: e.target.value === 'Fase de grupos' ? p.group_letter : null,
-                          }
-                        : p
-                    )
-                  }
-                >
-                  <option value="">Selecciona</option>
-                  {roundOptions.map((round) => (
+                <select value={normalizeRoundValue(editingMatch.round)} onChange={(e) => setEditingMatch((p) => (p ? { ...p, round: e.target.value } : p))}>
+                  {WORLD_CUP_ROUNDS.map((round) => (
                     <option key={round} value={round}>{round}</option>
                   ))}
                 </select>
@@ -777,18 +664,17 @@ export default function AdminPage() {
                 />
               </label>
             </div>
-            {isGroupRound(editingMatch.round) ? (
+            {isGroupStage(editingMatch.round) ? (
               <div className="row-2">
                 <label>
                   Grupo
-                  <select value={editingMatch.group_letter ?? ''} onChange={(e) => setEditingMatch((p) => (p ? { ...p, group_letter: e.target.value || null } : p))}>
-                    <option value="">Selecciona</option>
-                    {groupOptions.map((group) => (
+                  <select value={editingMatch.group_letter ?? 'A'} onChange={(e) => setEditingMatch((p) => (p ? { ...p, group_letter: e.target.value } : p))}>
+                    {WORLD_CUP_GROUPS.map((group) => (
                       <option key={group} value={group}>Grupo {group}</option>
                     ))}
                   </select>
                 </label>
-                <div className="selection-summary">Solo aplica a la fase de grupos</div>
+                <div />
               </div>
             ) : null}
             <div className="row-2">

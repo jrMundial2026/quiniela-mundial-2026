@@ -1,40 +1,56 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { getMatchStatusClass, getMatchStatusLabel } from '../lib/matchStatus'
-import { getTeamFlagEmoji } from '../lib/teamFlags'
-import { buildStandings, formatMatchScore } from '../lib/scoring'
+import { buildStandings, formatMatchScore, getOutcomeLabel } from '../lib/scoring'
+import { WORLD_CUP_GROUPS, isGroupStageRound } from '../lib/worldcup'
 import type { Match, Player, Prediction, StandingRow } from '../types'
 
-const GROUP_OPTIONS = ['ALL', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] as const
-
-function sortByKickoff(a: Match, b: Match) {
-  const aTime = a.kickoff_at ? new Date(a.kickoff_at).getTime() : Number.POSITIVE_INFINITY
-  const bTime = b.kickoff_at ? new Date(b.kickoff_at).getTime() : Number.POSITIVE_INFINITY
-  return aTime - bTime
+const statusLabel: Record<string, string> = {
+  scheduled: 'Pendiente',
+  live: 'En vivo',
+  in_play: 'En vivo',
+  finished: 'Finalizado',
+  postponed: 'Pospuesto',
+  cancelled: 'Cancelado',
 }
 
-function MatchCard({ match }: { match: Match }) {
-  return (
-    <div className="match-item worldcup-match-item">
-      <div className="match-topline worldcup-match-topline">
-        <div className="match-team match-team-home">
-          <span className="team-flag" aria-hidden="true">{getTeamFlagEmoji(match.home_team)}</span>
-          <strong>{match.home_team}</strong>
-        </div>
-        <span className="match-score">{formatMatchScore(match)}</span>
-        <div className="match-team match-team-away">
-          <strong>{match.away_team}</strong>
-          <span className="team-flag" aria-hidden="true">{getTeamFlagEmoji(match.away_team)}</span>
-        </div>
-      </div>
-      <div className="match-meta worldcup-match-meta">
-        <span className="group-badge">{match.round ?? 'Sin ronda'}</span>
-        <span className="group-badge group-badge-amber">{match.group_letter ? `Grupo ${match.group_letter}` : 'Sin grupo'}</span>
-        <span className={getMatchStatusClass(match.status)}>{getMatchStatusLabel(match.status)}</span>
-        <span>{match.kickoff_at ? new Date(match.kickoff_at).toLocaleString('es-MX') : 'Sin fecha'}</span>
-      </div>
-    </div>
-  )
+const statusClass: Record<string, string> = {
+  scheduled: 'status-scheduled',
+  live: 'status-live',
+  in_play: 'status-live',
+  finished: 'status-finished',
+  postponed: 'status-postponed',
+  cancelled: 'status-cancelled',
+}
+
+function getStatusText(status?: string) {
+  return statusLabel[status ?? ''] ?? 'Pendiente'
+}
+
+function getStatusBadgeClass(status?: string) {
+  return statusClass[status ?? ''] ?? 'status-scheduled'
+}
+
+function getPredictionText(pred: Prediction) {
+  if (pred.prediction_result) {
+    return getOutcomeLabel(pred.prediction_result)
+  }
+
+  if (typeof pred.home_goals === 'number' && typeof pred.away_goals === 'number') {
+    return `${pred.home_goals} - ${pred.away_goals}`
+  }
+
+  return 'Sin elegir'
+}
+
+function formatKickoff(kickoffAt: string | null) {
+  if (!kickoffAt) return 'Sin fecha'
+  return new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(kickoffAt))
 }
 
 export default function PublicTablePage() {
@@ -43,7 +59,8 @@ export default function PublicTablePage() {
   const [predictions, setPredictions] = useState<Prediction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<(typeof GROUP_OPTIONS)[number]>('ALL')
+  const [selectedGroup, setSelectedGroup] = useState<(typeof WORLD_CUP_GROUPS)[number]>('A')
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
 
   async function loadData() {
     setLoading(true)
@@ -85,44 +102,75 @@ export default function PublicTablePage() {
 
   const standings = useMemo<StandingRow[]>(() => buildStandings(players, matches, predictions), [players, matches, predictions])
 
-  const groupMatches = useMemo(() => {
-    const groupFiltered = matches.filter((match) => {
-      if (match.round !== 'Fase de grupos') return false
-      if (selectedGroup === 'ALL') return true
-      return match.group_letter === selectedGroup
+  const matchById = useMemo(() => new Map(matches.map((match) => [match.id, match] as const)), [matches])
+
+  const selectedPlayer = useMemo(
+    () => players.find((player) => player.id === selectedPlayerId) ?? null,
+    [players, selectedPlayerId]
+  )
+
+  const selectedPlayerPredictions = useMemo(() => {
+    if (!selectedPlayerId) return [] as Array<{ pred: Prediction; match: Match }>
+
+    const items: Array<{ pred: Prediction; match: Match }> = []
+
+    for (const pred of predictions) {
+      if (pred.player_id !== selectedPlayerId) continue
+      const match = matchById.get(pred.match_id)
+      if (!match) continue
+      items.push({ pred, match })
+    }
+
+    items.sort((a, b) => {
+      const aTime = new Date(a.match.kickoff_at ?? 0).getTime()
+      const bTime = new Date(b.match.kickoff_at ?? 0).getTime()
+      return aTime - bTime
     })
 
-    return [...groupFiltered].sort(sortByKickoff)
-  }, [matches, selectedGroup])
+    return items
+  }, [predictions, selectedPlayerId, matchById])
 
-  const upcomingMatches = useMemo(
-    () => groupMatches.filter((match) => match.status !== 'finished'),
+  const groupMatches = useMemo(
+    () =>
+      matches.filter((match) => isGroupStageRound(match.round) && (match.group_letter ?? '').toUpperCase() === selectedGroup),
+    [matches, selectedGroup]
+  )
+
+  const upcomingGroupMatches = useMemo(
+    () =>
+      [...groupMatches]
+        .filter((match) => match.status !== 'finished')
+        .sort((a, b) => new Date(a.kickoff_at ?? 0).getTime() - new Date(b.kickoff_at ?? 0).getTime()),
     [groupMatches]
   )
 
-  const finishedMatches = useMemo(
-    () => groupMatches.filter((match) => match.status === 'finished'),
+  const finishedGroupMatches = useMemo(
+    () =>
+      [...groupMatches]
+        .filter((match) => match.status === 'finished')
+        .sort((a, b) => new Date(b.kickoff_at ?? 0).getTime() - new Date(a.kickoff_at ?? 0).getTime()),
     [groupMatches]
   )
 
   return (
     <section className="panel">
-      <div className="section-header hero-header">
+      <div className="section-header">
         <div>
           <h1>Tabla general</h1>
           <p>Se actualiza sola cuando cambias resultados o pronósticos desde admin.</p>
         </div>
-        <div className="header-tools">
-          <div className="pill">URL pública: #/tabla</div>
-          <label className="group-filter">
+        <div className="section-actions">
+          <label className="group-picker">
             <span>Grupo</span>
-            <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value as (typeof GROUP_OPTIONS)[number])}>
-              <option value="ALL">Todos los grupos</option>
-              {GROUP_OPTIONS.filter((group) => group !== 'ALL').map((group) => (
-                <option key={group} value={group}>Grupo {group}</option>
+            <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value as (typeof WORLD_CUP_GROUPS)[number])}>
+              {WORLD_CUP_GROUPS.map((group) => (
+                <option key={group} value={group}>
+                  Grupo {group}
+                </option>
               ))}
             </select>
           </label>
+          <div className="pill">URL pública: #/tabla</div>
         </div>
       </div>
 
@@ -130,9 +178,13 @@ export default function PublicTablePage() {
       {error ? <div className="state-box error">{error}</div> : null}
 
       <div className="grid-2 public-grid">
-        <div className="card worldcup-card">
-          <h2>Clasificación</h2>
-          <div className="table-wrap">
+        <div className="card card-hero">
+          <div className="card-headline">
+            <h2>Clasificación</h2>
+            <p>Ordenada por puntos y aciertos.</p>
+          </div>
+
+          <div className="table-wrap table-strong">
             <table>
               <thead>
                 <tr>
@@ -150,12 +202,20 @@ export default function PublicTablePage() {
                   </tr>
                 ) : (
                   standings.map((row, index) => (
-                    <tr key={row.player_id} className={index < 3 ? `rank-${index + 1}` : ''}>
-                      <td>{index + 1}</td>
-                      <td>{row.name}</td>
-                      <td>{row.points}</td>
+                    <tr key={row.player_id}>
+                      <td className="rank-cell">{index + 1}</td>
+                      <td className="player-name-cell">{row.name}</td>
+                      <td className="points-cell">{row.points}</td>
                       <td>{row.correct_results}</td>
-                      <td>{row.predictions}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="ghost-button table-action-button"
+                          onClick={() => setSelectedPlayerId(row.player_id)}
+                        >
+                          Ver
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -164,44 +224,125 @@ export default function PublicTablePage() {
           </div>
         </div>
 
-        <div className="card worldcup-card">
-          <div className="card-title-row">
-            <div>
-              <h2>Partidos del grupo</h2>
-              <p>Arriba ves los próximos y abajo los resultados ya finalizados.</p>
-            </div>
-            <div className="pill">{selectedGroup === 'ALL' ? 'Todos los grupos' : `Grupo ${selectedGroup}`}</div>
+        <div className="card card-side">
+          <div className="card-headline">
+            <h2>Partidos del Grupo {selectedGroup}</h2>
+            <p>Se separan los próximos partidos y los resultados terminados.</p>
           </div>
 
           <div className="match-section">
-            <div className="match-section-header">
-              <h3>Próximos partidos</h3>
-              <span className="selection-summary">{upcomingMatches.length} por jugar</span>
-            </div>
-            <div className="match-list worldcup-match-list">
-              {upcomingMatches.length === 0 ? (
-                <div className="empty-row">Todavía no hay partidos pendientes para este grupo.</div>
+            <h3>Próximos partidos</h3>
+            <div className="match-list match-list-compact">
+              {upcomingGroupMatches.length === 0 ? (
+                <div className="empty-row">No hay partidos próximos para este grupo.</div>
               ) : (
-                upcomingMatches.map((match) => <MatchCard key={match.id} match={match} />)
+                upcomingGroupMatches.map((match) => (
+                  <div key={match.id} className="match-item match-item-modern">
+                    <div className="match-topline match-topline-modern">
+                      <div className="team-block">
+                        <strong>{match.home_team}</strong>
+                        <span>{match.round ?? 'Fase de grupos'} · Grupo {match.group_letter ?? selectedGroup}</span>
+                      </div>
+
+                      <div className="score-block">
+                        <span className="score-value">{formatMatchScore(match)}</span>
+                        <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                          {getStatusText(match.status)}
+                        </span>
+                      </div>
+
+                      <div className="team-block team-block-right">
+                        <strong>{match.away_team}</strong>
+                        <span>{formatKickoff(match.kickoff_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
 
           <div className="match-section">
-            <div className="match-section-header">
-              <h3>Resultados</h3>
-              <span className="selection-summary">{finishedMatches.length} finalizados</span>
-            </div>
-            <div className="match-list worldcup-match-list">
-              {finishedMatches.length === 0 ? (
+            <h3>Resultados</h3>
+            <div className="match-list match-list-compact">
+              {finishedGroupMatches.length === 0 ? (
                 <div className="empty-row">Todavía no hay resultados para este grupo.</div>
               ) : (
-                finishedMatches.map((match) => <MatchCard key={match.id} match={match} />)
+                finishedGroupMatches.map((match) => (
+                  <div key={match.id} className="match-item match-item-modern">
+                    <div className="match-topline match-topline-modern">
+                      <div className="team-block">
+                        <strong>{match.home_team}</strong>
+                        <span>{match.round ?? 'Fase de grupos'} · Grupo {match.group_letter ?? selectedGroup}</span>
+                      </div>
+
+                      <div className="score-block">
+                        <span className="score-value">{formatMatchScore(match)}</span>
+                        <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                          {getStatusText(match.status)}
+                        </span>
+                      </div>
+
+                      <div className="team-block team-block-right">
+                        <strong>{match.away_team}</strong>
+                        <span>{formatKickoff(match.kickoff_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {selectedPlayer ? (
+        <div className="modal-backdrop" onClick={() => setSelectedPlayerId(null)}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>Pronósticos de {selectedPlayer.name}</h3>
+                <p>{selectedPlayerPredictions.length} pronósticos registrados</p>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="ghost-button" onClick={() => setSelectedPlayerId(null)}>
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            {selectedPlayerPredictions.length === 0 ? (
+              <div className="empty-row">Todavía no tiene pronósticos.</div>
+            ) : (
+              <div className="prediction-list">
+                {selectedPlayerPredictions.map(({ pred, match }) => (
+                  <div key={pred.id} className="prediction-row">
+                    <div className="prediction-main">
+                      <strong>
+                        {match.home_team} vs {match.away_team}
+                      </strong>
+                      <span>
+                        {match.round ?? 'Fase de grupos'}
+                        {match.group_letter ? ` · Grupo ${match.group_letter}` : ''}
+                        {' · '}
+                        {formatKickoff(match.kickoff_at)}
+                      </span>
+                    </div>
+
+                    <div className="prediction-side">
+                      <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                        {getStatusText(match.status)}
+                      </span>
+                      <span className="prediction-value">{getPredictionText(pred)}</span>
+                      <span className="prediction-score">{formatMatchScore(match)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }
