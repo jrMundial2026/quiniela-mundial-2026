@@ -25,6 +25,25 @@ create table if not exists public.matches (
   updated_at timestamptz not null default now()
 );
 
+
+
+alter table public.matches
+  add column if not exists group_letter text;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'matches_group_letter_check'
+      and conrelid = 'public.matches'::regclass
+  ) then
+    alter table public.matches
+      add constraint matches_group_letter_check
+      check (group_letter in ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L') or group_letter is null);
+  end if;
+end $$;
+
 create table if not exists public.predictions (
   id uuid primary key default gen_random_uuid(),
   player_id uuid not null references public.players(id) on delete cascade,
@@ -36,61 +55,6 @@ create table if not exists public.predictions (
   updated_at timestamptz not null default now(),
   unique (player_id, match_id)
 );
-
-do $$
-begin
-  if not exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'matches' and column_name = 'group_letter'
-  ) then
-    alter table public.matches add column group_letter text;
-  end if;
-end $$;
-
-update public.matches
-set round = case
-  when round is null then round
-  when lower(round) = 'fase de grupos' then 'Fase de grupos'
-  when lower(round) = 'dieciseisavos de final' then 'Dieciseisavos de final'
-  when lower(round) = 'octavos de final' then 'Octavos de final'
-  when lower(round) = 'cuartos de final' then 'Cuartos de final'
-  when lower(round) = 'semifinal' then 'Semifinal'
-  when lower(round) = 'final' then 'Final'
-  else round
-end;
-
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint where conname = 'matches_round_check' and conrelid = 'public.matches'::regclass
-  ) then
-    alter table public.matches
-      add constraint matches_round_check
-      check (
-        round is null or round in (
-          'Fase de grupos',
-          'Dieciseisavos de final',
-          'Octavos de final',
-          'Cuartos de final',
-          'Semifinal',
-          'Final'
-        )
-      );
-  end if;
-end $$;
-
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint where conname = 'matches_group_letter_check' and conrelid = 'public.matches'::regclass
-  ) then
-    alter table public.matches
-      add constraint matches_group_letter_check
-      check (
-        group_letter is null or group_letter in ('A','B','C','D','E','F','G','H','I','J','K','L')
-      );
-  end if;
-end $$;
 
 alter table public.predictions
   add column if not exists prediction_result text;
