@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#041027" />
+      <stop offset="48%" stop-color="#0b2e82" />
+      <stop offset="100%" stop-color="#1673ff" />
+    </linearGradient>
+    <linearGradient id="light" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2eb6ff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#7ad7ff" stop-opacity="0.65" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <path d="M0 0H1600V150C1340 180 1240 55 1020 82C820 108 740 220 470 180C260 148 150 34 0 0Z" fill="#102f8a" opacity="0.68"/>
+  <path d="M0 174C168 120 338 110 530 156C742 208 896 286 1180 250C1360 227 1480 168 1600 120V380C1470 432 1346 488 1140 478C860 464 768 368 520 343C316 322 140 350 0 392Z" fill="url(#light)" opacity="0.9"/>
+  <path d="M0 410C180 350 356 352 580 408C790 460 930 566 1200 550C1386 538 1502 478 1600 438V900H0Z" fill="#144ce0" opacity="0.86"/>
+  <circle cx="1320" cy="120" r="230" fill="url(#glow)"/>
+  <circle cx="240" cy="760" r="300" fill="url(#glow)"/>
+  <circle cx="1120" cy="760" r="240" fill="url(#glow)"/>
+</svg>
