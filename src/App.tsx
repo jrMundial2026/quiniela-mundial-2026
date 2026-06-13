@@ -8,12 +8,12 @@ export default function App() {
       <header className="topbar">
         <div>
           <div className="brand">Quiniela del Mundial</div>
-          <div className="subtitle">Tabla general y administración</div>
+          <div className="subtitle">Puedes ver tus aciertos, predicciones, resultados y proximos partidos.</div>
         </div>
-        <nav className="nav">
-          <Link to="/tabla">Tabla</Link>
-          <Link to="/admin">Admin</Link>
-        </nav>
+        {/* <nav className="nav">
+          <Link to="/tabla">Tabla General</Link>
+          <Link to="/admin">Administración</Link>
+        </nav> */}
       </header>
 
       <main className="main-content">

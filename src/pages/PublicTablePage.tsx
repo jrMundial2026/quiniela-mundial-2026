@@ -59,8 +59,9 @@ export default function PublicTablePage() {
   const [predictions, setPredictions] = useState<Prediction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<(typeof WORLD_CUP_GROUPS)[number]>('A')
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<(typeof WORLD_CUP_GROUPS)[number]>('A')
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false)
 
   async function loadData() {
     setLoading(true)
@@ -99,6 +100,17 @@ export default function PublicTablePage() {
       void supabase.removeChannel(channel)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isGroupModalOpen) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsGroupModalOpen(false)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isGroupModalOpen])
 
   const standings = useMemo<StandingRow[]>(() => buildStandings(players, matches, predictions), [players, matches, predictions])
 
@@ -152,36 +164,121 @@ export default function PublicTablePage() {
     [groupMatches]
   )
 
+  const groupModalBody = (
+    <div className="modal-card group-modal-card" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-header">
+        <div>
+          <h3>Resultados y Proximos Partidos Grupo {selectedGroup}</h3>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="ghost-button" onClick={() => setIsGroupModalOpen(false)}>
+            Cerrar
+          </button>
+        </div>
+      </div>
+
+      <label className="group-picker group-picker-modal">
+        <span>Grupo</span>
+        <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value as (typeof WORLD_CUP_GROUPS)[number])}>
+          {WORLD_CUP_GROUPS.map((group) => (
+            <option key={group} value={group}>
+              Grupo {group}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="match-section">
+        <h3>Próximos partidos</h3>
+        <div className="match-list match-list-compact">
+          {upcomingGroupMatches.length === 0 ? (
+            <div className="empty-row">No hay partidos próximos para este grupo.</div>
+          ) : (
+            upcomingGroupMatches.map((match) => (
+              <div key={match.id} className="match-item match-item-modern">
+                <div className="match-topline match-topline-modern">
+                  <div className="team-block">
+                    <strong>{match.home_team}</strong>
+                    <span>{match.round ?? 'Fase de grupos'} · Grupo {match.group_letter ?? selectedGroup}</span>
+                  </div>
+
+                  <div className="score-block">
+                    <span className="score-value">{formatMatchScore(match)}</span>
+                    <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                      {getStatusText(match.status)}
+                    </span>
+                  </div>
+
+                  <div className="team-block team-block-right">
+                    <strong>{match.away_team}</strong>
+                    <span>{formatKickoff(match.kickoff_at)}</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="match-section">
+        <h3>Resultados</h3>
+        <div className="match-list match-list-compact">
+          {finishedGroupMatches.length === 0 ? (
+            <div className="empty-row">Todavía no hay resultados para este grupo.</div>
+          ) : (
+            finishedGroupMatches.map((match) => (
+              <div key={match.id} className="match-item match-item-modern">
+                <div className="match-topline match-topline-modern">
+                  <div className="team-block">
+                    <strong>{match.home_team}</strong>
+                    <span>{match.round ?? 'Fase de grupos'} · Grupo {match.group_letter ?? selectedGroup}</span>
+                  </div>
+
+                  <div className="score-block">
+                    <span className="score-value">{formatMatchScore(match)}</span>
+                    <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                      {getStatusText(match.status)}
+                    </span>
+                  </div>
+
+                  <div className="team-block team-block-right">
+                    <strong>{match.away_team}</strong>
+                    <span>{formatKickoff(match.kickoff_at)}</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <section className="panel">
       <div className="section-header">
         <div>
           <h1>Tabla general</h1>
-          <p>Se actualiza sola cuando cambias resultados o pronósticos desde admin.</p>
+          <p>Se actualiza al terminar el partido.</p>
         </div>
         <div className="section-actions">
-          <label className="group-picker">
-            <span>Grupo</span>
-            <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value as (typeof WORLD_CUP_GROUPS)[number])}>
-              {WORLD_CUP_GROUPS.map((group) => (
-                <option key={group} value={group}>
-                  Grupo {group}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="pill">URL pública: #/tabla</div>
+          <button
+            type="button"
+            className="ghost-button group-open-button"
+            onClick={() => setIsGroupModalOpen(true)}
+          >
+            Ver resultados y proximos partidos por grupo
+          </button>
         </div>
       </div>
 
       {loading ? <div className="state-box">Cargando datos...</div> : null}
       {error ? <div className="state-box error">{error}</div> : null}
 
-      <div className="grid-2 public-grid">
         <div className="card card-hero">
           <div className="card-headline">
             <h2>Clasificación</h2>
-            <p>Ordenada por puntos y aciertos.</p>
+            <p>Ordenada por aciertos totales.</p>
           </div>
 
           <div className="table-wrap table-strong">
@@ -189,8 +286,7 @@ export default function PublicTablePage() {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Jugador</th>
-                  <th>Puntos</th>
+                  <th>Participante</th>
                   <th>Aciertos</th>
                   <th>Pronósticos</th>
                 </tr>
@@ -205,7 +301,6 @@ export default function PublicTablePage() {
                     <tr key={row.player_id}>
                       <td className="rank-cell">{index + 1}</td>
                       <td className="player-name-cell">{row.name}</td>
-                      <td className="points-cell">{row.points}</td>
                       <td>{row.correct_results}</td>
                       <td>
                         <button
@@ -224,77 +319,13 @@ export default function PublicTablePage() {
           </div>
         </div>
 
-        <div className="card card-side">
-          <div className="card-headline">
-            <h2>Partidos del Grupo {selectedGroup}</h2>
-            <p>Se separan los próximos partidos y los resultados terminados.</p>
-          </div>
+        
 
-          <div className="match-section">
-            <h3>Próximos partidos</h3>
-            <div className="match-list match-list-compact">
-              {upcomingGroupMatches.length === 0 ? (
-                <div className="empty-row">No hay partidos próximos para este grupo.</div>
-              ) : (
-                upcomingGroupMatches.map((match) => (
-                  <div key={match.id} className="match-item match-item-modern">
-                    <div className="match-topline match-topline-modern">
-                      <div className="team-block">
-                        <strong>{match.home_team}</strong>
-                        <span>{match.round ?? 'Fase de grupos'} · Grupo {match.group_letter ?? selectedGroup}</span>
-                      </div>
-
-                      <div className="score-block">
-                        <span className="score-value">{formatMatchScore(match)}</span>
-                        <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
-                          {getStatusText(match.status)}
-                        </span>
-                      </div>
-
-                      <div className="team-block team-block-right">
-                        <strong>{match.away_team}</strong>
-                        <span>{formatKickoff(match.kickoff_at)}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="match-section">
-            <h3>Resultados</h3>
-            <div className="match-list match-list-compact">
-              {finishedGroupMatches.length === 0 ? (
-                <div className="empty-row">Todavía no hay resultados para este grupo.</div>
-              ) : (
-                finishedGroupMatches.map((match) => (
-                  <div key={match.id} className="match-item match-item-modern">
-                    <div className="match-topline match-topline-modern">
-                      <div className="team-block">
-                        <strong>{match.home_team}</strong>
-                        <span>{match.round ?? 'Fase de grupos'} · Grupo {match.group_letter ?? selectedGroup}</span>
-                      </div>
-
-                      <div className="score-block">
-                        <span className="score-value">{formatMatchScore(match)}</span>
-                        <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
-                          {getStatusText(match.status)}
-                        </span>
-                      </div>
-
-                      <div className="team-block team-block-right">
-                        <strong>{match.away_team}</strong>
-                        <span>{formatKickoff(match.kickoff_at)}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+      {isGroupModalOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsGroupModalOpen(false)}>
+          {groupModalBody}
         </div>
-      </div>
+      ) : null}
 
       {selectedPlayer ? (
         <div className="modal-backdrop" onClick={() => setSelectedPlayerId(null)}>
