@@ -87,9 +87,9 @@ export default function AdminPage() {
 
   async function refreshData() {
     const [playersRes, matchesRes, predictionsRes] = await Promise.all([
-      supabase.from('players').select('*').order('name', { ascending: true }),
-      supabase.from('matches').select('*').order('kickoff_at', { ascending: false, nullsFirst: false }),
-      supabase.from('predictions').select('*').order('created_at', { ascending: false }),
+      supabase.from('players').select('*').range(0,5000).order('name', { ascending: true }),
+      supabase.from('matches').select('*').range(0,5000).order('kickoff_at', { ascending: false, nullsFirst: false }),
+      supabase.from('predictions').select('*').range(0,5000).order('created_at', { ascending: false }),
     ])
 
     if (!playersRes.error) setPlayers((playersRes.data as Player[]) ?? [])

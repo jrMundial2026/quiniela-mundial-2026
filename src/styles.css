@@ -274,7 +274,7 @@ label { display: grid; gap: 0.45rem; color: #bfd0ef; font-size: 0.95rem; }
 }
 
 .card-hero {
-  min-height: 620px;
+  
   display: flex;
   flex-direction: column;
 }

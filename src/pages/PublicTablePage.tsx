@@ -42,6 +42,63 @@ function getPredictionText(pred: Prediction) {
   return 'Sin elegir'
 }
 
+function normalizeOutcome(value?: string | null) {
+  const normalized = (value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (!normalized) return null
+
+  if (['home', 'local', 'gana local', '1'].includes(normalized)) return 'HOME'
+  if (['draw', 'empate', 'x', 'tie'].includes(normalized)) return 'DRAW'
+  if (['away', 'visita', 'visitante', 'gana visita', '2'].includes(normalized)) return 'AWAY'
+
+  return null
+}
+
+function getOutcomeFromMatch(match: Match) {
+  if (typeof match.home_goals !== 'number' || typeof match.away_goals !== 'number') return null
+
+  if (match.home_goals > match.away_goals) return 'HOME'
+  if (match.home_goals < match.away_goals) return 'AWAY'
+  return 'DRAW'
+}
+
+function getPredictionOutcome(pred: Prediction) {
+  const normalizedPrediction = normalizeOutcome(pred.prediction_result)
+  if (normalizedPrediction) return normalizedPrediction
+
+  if (typeof pred.home_goals === 'number' && typeof pred.away_goals === 'number') {
+    if (pred.home_goals > pred.away_goals) return 'HOME'
+    if (pred.home_goals < pred.away_goals) return 'AWAY'
+    return 'DRAW'
+  }
+
+  return null
+}
+
+function getPredictionVerdict(pred: Prediction, match: Match) {
+  if (match.status !== 'finished') return null
+
+  const actualOutcome = getOutcomeFromMatch(match)
+  const predictedOutcome = getPredictionOutcome(pred)
+
+  if (!actualOutcome || !predictedOutcome) return null
+
+  return actualOutcome === predictedOutcome
+}
+
+function getMostrarMarcador(pred: Prediction, match: Match){
+  if (match.status !== 'live' && match.status !== 'finished') {
+    return null
+  }
+  else{
+    return true
+  }
+}
+
 function formatKickoff(kickoffAt: string | null) {
   if (!kickoffAt) return 'Sin fecha'
   return new Intl.DateTimeFormat('es-MX', {
@@ -68,9 +125,9 @@ export default function PublicTablePage() {
     setError(null)
 
     const [playersRes, matchesRes, predictionsRes] = await Promise.all([
-      supabase.from('players').select('*').order('name', { ascending: true }),
-      supabase.from('matches').select('*').order('kickoff_at', { ascending: false, nullsFirst: false }),
-      supabase.from('predictions').select('*'),
+      supabase.from('players').select('*').range(0,5000).order('name', { ascending: true }),
+      supabase.from('matches').select('*').range(0,5000).order('kickoff_at', { ascending: false, nullsFirst: false }),
+      supabase.from('predictions').select('*').range(0,5000),
     ])
 
     if (playersRes.error || matchesRes.error || predictionsRes.error) {
@@ -164,11 +221,19 @@ export default function PublicTablePage() {
     [groupMatches]
   )
 
+  const liveMatches = useMemo(
+    () =>
+      [...matches]
+        .filter((match) => match.status === 'live')
+        .sort((a, b) => new Date(a.kickoff_at ?? 0).getTime() - new Date(b.kickoff_at ?? 0).getTime()),
+    [matches]
+  )
+
   const groupModalBody = (
     <div className="modal-card group-modal-card" onClick={(event) => event.stopPropagation()}>
       <div className="modal-header">
         <div>
-          <h3>Resultados y Proximos Partidos Grupo {selectedGroup}</h3>
+          <h3>Resultados, partidos en vivo y próximos</h3>
         </div>
         <div className="modal-actions">
           <button type="button" className="ghost-button" onClick={() => setIsGroupModalOpen(false)}>
@@ -178,7 +243,7 @@ export default function PublicTablePage() {
       </div>
 
       <label className="group-picker group-picker-modal">
-        <span>Grupo</span>
+        
         <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value as (typeof WORLD_CUP_GROUPS)[number])}>
           {WORLD_CUP_GROUPS.map((group) => (
             <option key={group} value={group}>
@@ -198,21 +263,17 @@ export default function PublicTablePage() {
               <div key={match.id} className="match-item match-item-modern">
                 <div className="match-topline match-topline-modern">
                   <div className="team-block">
-                    <strong>{match.home_team}</strong>
-                    <span>{match.round ?? 'Fase de grupos'} · Grupo {match.group_letter ?? selectedGroup}</span>
+                    <strong>{match.home_team} vs {match.away_team}</strong>
+                    {/* {match.round ?? 'Fase de grupos'} · */}
+                    <span> Grupo {match.group_letter ?? selectedGroup} · {formatKickoff(match.kickoff_at)}</span>
                   </div>
 
-                  <div className="score-block">
-                    <span className="score-value">{formatMatchScore(match)}</span>
-                    <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
-                      {getStatusText(match.status)}
-                    </span>
-                  </div>
-
-                  <div className="team-block team-block-right">
-                    <strong>{match.away_team}</strong>
-                    <span>{formatKickoff(match.kickoff_at)}</span>
-                  </div>
+                  <div className="prediction-side">
+                      <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                        {getStatusText(match.status)}
+                      </span>
+                      <span className="prediction-score">Marcador {formatMatchScore(match)}</span>
+                    </div>
                 </div>
               </div>
             ))
@@ -230,21 +291,17 @@ export default function PublicTablePage() {
               <div key={match.id} className="match-item match-item-modern">
                 <div className="match-topline match-topline-modern">
                   <div className="team-block">
-                    <strong>{match.home_team}</strong>
-                    <span>{match.round ?? 'Fase de grupos'} · Grupo {match.group_letter ?? selectedGroup}</span>
+                    <strong>{match.home_team} vs {match.away_team}</strong>
+                    {/* {match.round ?? 'Fase de grupos'} · */}
+                    <span> Grupo {match.group_letter ?? selectedGroup} · {formatKickoff(match.kickoff_at)}</span>
                   </div>
 
-                  <div className="score-block">
-                    <span className="score-value">{formatMatchScore(match)}</span>
-                    <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
-                      {getStatusText(match.status)}
-                    </span>
-                  </div>
-
-                  <div className="team-block team-block-right">
-                    <strong>{match.away_team}</strong>
-                    <span>{formatKickoff(match.kickoff_at)}</span>
-                  </div>
+                  <div className="prediction-side">
+                      <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                        {getStatusText(match.status)}
+                      </span>
+                      <span className="prediction-score">Marcador {formatMatchScore(match)}</span>
+                    </div>
                 </div>
               </div>
             ))
@@ -259,7 +316,7 @@ export default function PublicTablePage() {
       <div className="section-header">
         <div>
           <h1>Tabla general</h1>
-          <p>Se actualiza al terminar el partido.</p>
+          <p>Se actualiza en tiempo real, cuando haya partidos en vivo, los aciertos cambian conforme el marcador!</p>
         </div>
         <div className="section-actions">
           <button
@@ -274,6 +331,40 @@ export default function PublicTablePage() {
 
       {loading ? <div className="state-box">Cargando datos...</div> : null}
       {error ? <div className="state-box error">{error}</div> : null}
+
+      {liveMatches.length > 0 ? (
+        <div className="card card-hero">
+          <div className="card-headline">
+            <h2>Partidos en vivo</h2>
+            <p>Se muestran solo cuando hay encuentros en curso.</p>
+          </div>
+
+          <div className="match-list match-list-compact">
+            {liveMatches.map((match) => (
+              <div key={match.id} className="match-item match-item-modern">
+                <div className="match-topline match-topline-modern">
+                  <div className="team-block">
+                    <strong>{match.home_team} vs {match.away_team}</strong>
+                    <span>
+                      {match.round ?? 'Fase de grupos'}
+                      {match.group_letter ? ` · Grupo ${match.group_letter}` : ''}
+                      {' · '}
+                      {formatKickoff(match.kickoff_at)}
+                    </span>
+                  </div>
+
+                  <div className="prediction-side">
+                    <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                      {getStatusText(match.status)}
+                    </span>
+                    <span className="prediction-score">Marcador {formatMatchScore(match)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
         <div className="card card-hero">
           <div className="card-headline">
@@ -346,29 +437,59 @@ export default function PublicTablePage() {
               <div className="empty-row">Todavía no tiene pronósticos.</div>
             ) : (
               <div className="prediction-list">
-                {selectedPlayerPredictions.map(({ pred, match }) => (
-                  <div key={pred.id} className="prediction-row">
-                    <div className="prediction-main">
-                      <strong>
-                        {match.home_team} vs {match.away_team}
-                      </strong>
-                      <span>
-                        {match.round ?? 'Fase de grupos'}
-                        {match.group_letter ? ` · Grupo ${match.group_letter}` : ''}
-                        {' · '}
-                        {formatKickoff(match.kickoff_at)}
-                      </span>
-                    </div>
+                {selectedPlayerPredictions.map(({ pred, match }) => {
+                  const verdict = getPredictionVerdict(pred, match)
+                  const mostrarMarcadorPredicciones = getMostrarMarcador(pred,match)
+                  return (
+                    <div key={pred.id} className="prediction-row">
+                      <div className="prediction-main">
+                        <strong>
+                          {match.home_team} vs {match.away_team}
+                        </strong>
+                        <span>
+                          {match.round ?? 'Fase de grupos'}
+                          {match.group_letter ? ` · Grupo ${match.group_letter}` : ''}
+                          {' · '}
+                          {formatKickoff(match.kickoff_at)}
+                        </span>
+                      </div>
 
-                    <div className="prediction-side">
-                      <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
-                        {getStatusText(match.status)}
-                      </span>
-                      <span className="prediction-value">{getPredictionText(pred)}</span>
-                      <span className="prediction-score">{formatMatchScore(match)}</span>
+                      <div className="prediction-side">
+                        <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
+                          {getStatusText(match.status)}
+                        </span>
+                        <span className="prediction-value">Pronóstico: {getPredictionText(pred)}  
+                          
+                        </span>
+                        {verdict !== null ? (
+                          <span
+                            className="prediction-verdict"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '999px',
+                              padding: '0.25rem 0.65rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              letterSpacing: '0.01em',
+                              background: verdict ? 'rgba(34, 197, 94, 0.16)' : 'rgba(239, 68, 68, 0.16)',
+                              color: verdict ? '#86efac' : '#fca5a5',
+                              border: verdict ? '1px solid rgba(34, 197, 94, 0.35)' : '1px solid rgba(239, 68, 68, 0.35)',
+                            }}
+                          >
+                            {verdict ? 'Acertó pronóstico' : 'No acertó pronóstico'}
+                          </span>
+                        ) : null}
+                        {mostrarMarcadorPredicciones !== null ? (
+                          <span className="prediction-score">Marcador {formatMatchScore(match)}</span>
+                        ): null}
+                        
+                        
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
