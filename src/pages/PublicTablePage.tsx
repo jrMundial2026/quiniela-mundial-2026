@@ -120,6 +120,30 @@ export default function PublicTablePage() {
   const [selectedGroup, setSelectedGroup] = useState<(typeof WORLD_CUP_GROUPS)[number]>('A')
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false)
 
+  const openGroupModal = () => {
+    setIsGroupModalOpen(true)
+    window.history.pushState({ modal: 'group' }, '')
+  }
+
+  const closeGroupModal = () => {
+    setIsGroupModalOpen(false)
+    if (window.history.state?.modal === 'group') {
+      window.history.back()
+    }
+  }
+
+  const openPlayerModal = (playerId: string) => {
+    setSelectedPlayerId(playerId)
+    window.history.pushState({ modal: 'player' }, '')
+  }
+
+  const closePlayerModal = () => {
+    setSelectedPlayerId(null)
+    if (window.history.state?.modal === 'player') {
+      window.history.back()
+    }
+  }
+
   async function loadData() {
     setLoading(true)
     setError(null)
@@ -159,15 +183,40 @@ export default function PublicTablePage() {
   }, [])
 
   useEffect(() => {
-    if (!isGroupModalOpen) return
+    if (!isGroupModalOpen && !selectedPlayerId) return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsGroupModalOpen(false)
+      if (event.key !== 'Escape') return
+
+      if (selectedPlayerId) {
+        closePlayerModal()
+        return
+      }
+
+      if (isGroupModalOpen) {
+        closeGroupModal()
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isGroupModalOpen])
+  }, [isGroupModalOpen, selectedPlayerId])
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (selectedPlayerId) {
+        setSelectedPlayerId(null)
+        return
+      }
+
+      if (isGroupModalOpen) {
+        setIsGroupModalOpen(false)
+      }
+    }
+
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [isGroupModalOpen, selectedPlayerId])
 
   const standings = useMemo<StandingRow[]>(() => buildStandings(players, matches, predictions), [players, matches, predictions])
 
@@ -236,7 +285,7 @@ export default function PublicTablePage() {
           <h3>Resultados, partidos en vivo y próximos</h3>
         </div>
         <div className="modal-actions">
-          <button type="button" className="ghost-button" onClick={() => setIsGroupModalOpen(false)}>
+          <button type="button" className="ghost-button" onClick={closeGroupModal}>
             Cerrar
           </button>
         </div>
@@ -322,7 +371,7 @@ export default function PublicTablePage() {
           <button
             type="button"
             className="ghost-button group-open-button"
-            onClick={() => setIsGroupModalOpen(true)}
+            onClick={openGroupModal}
           >
             Ver resultados y proximos partidos por grupo
           </button>
@@ -397,7 +446,7 @@ export default function PublicTablePage() {
                         <button
                           type="button"
                           className="ghost-button table-action-button"
-                          onClick={() => setSelectedPlayerId(row.player_id)}
+                          onClick={() => openPlayerModal(row.player_id)}
                         >
                           Ver
                         </button>
@@ -413,13 +462,13 @@ export default function PublicTablePage() {
         
 
       {isGroupModalOpen ? (
-        <div className="modal-backdrop" onClick={() => setIsGroupModalOpen(false)}>
+        <div className="modal-backdrop" onClick={closeGroupModal}>
           {groupModalBody}
         </div>
       ) : null}
 
       {selectedPlayer ? (
-        <div className="modal-backdrop" onClick={() => setSelectedPlayerId(null)}>
+        <div className="modal-backdrop" onClick={closePlayerModal}>
           <div className="modal-card" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <div>
@@ -427,7 +476,7 @@ export default function PublicTablePage() {
                 <p>{selectedPlayerPredictions.length} pronósticos registrados</p>
               </div>
               <div className="modal-actions">
-                <button type="button" className="ghost-button" onClick={() => setSelectedPlayerId(null)}>
+                <button type="button" className="ghost-button" onClick={closePlayerModal}>
                   Cerrar
                 </button>
               </div>
