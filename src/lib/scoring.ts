@@ -82,11 +82,11 @@ export function formatMatchScore(match: Match) {
 export function getOutcomeLabel(outcome: PredictionOutcome | null | undefined) {
   switch (outcome) {
     case 'HOME':
-      return 'Gana local'
+      return 'Gana '
     case 'DRAW':
       return 'Empate'
     case 'AWAY':
-      return 'Gana visita'
+      return 'Gana '
     default:
       return 'Sin elegir'
   }

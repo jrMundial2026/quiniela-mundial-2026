@@ -99,6 +99,21 @@ function getMostrarMarcador(pred: Prediction, match: Match){
   }
 }
 
+function getEquipoPrediccion(pred: Prediction, match: Match){
+  if (pred.prediction_result === "HOME"){
+    return match.home_team
+  }
+  else if (pred.prediction_result === "DRAW"){
+    return null
+  }
+  else if (pred.prediction_result === "AWAY"){
+    return match.away_team
+  }
+  else {
+    return null
+  }
+}
+
 function formatKickoff(kickoffAt: string | null) {
   if (!kickoffAt) return 'Sin fecha'
   return new Intl.DateTimeFormat('es-MX', {
@@ -108,6 +123,12 @@ function formatKickoff(kickoffAt: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(kickoffAt))
+}
+
+
+function getLocalDateKey(value: string | null) {
+  if (!value) return null
+  return new Date(value).toLocaleDateString('en-CA')
 }
 
 export default function PublicTablePage() {
@@ -275,6 +296,18 @@ export default function PublicTablePage() {
       [...matches]
         .filter((match) => match.status === 'live')
         .sort((a, b) => new Date(a.kickoff_at ?? 0).getTime() - new Date(b.kickoff_at ?? 0).getTime()),
+    [matches]
+  )
+
+  const todayMatches = useMemo(
+    () => {
+      const todayKey = getLocalDateKey(new Date().toISOString())
+      if (!todayKey) return [] as Match[]
+
+      return [...matches]
+        .filter((match) => getLocalDateKey(match.kickoff_at) === todayKey)
+        .sort((a, b) => new Date(a.kickoff_at ?? 0).getTime() - new Date(b.kickoff_at ?? 0).getTime())
+    },
     [matches]
   )
 
@@ -482,6 +515,8 @@ export default function PublicTablePage() {
               </div>
             </div>
 
+  
+
             {selectedPlayerPredictions.length === 0 ? (
               <div className="empty-row">Todavía no tiene pronósticos.</div>
             ) : (
@@ -489,6 +524,7 @@ export default function PublicTablePage() {
                 {selectedPlayerPredictions.map(({ pred, match }) => {
                   const verdict = getPredictionVerdict(pred, match)
                   const mostrarMarcadorPredicciones = getMostrarMarcador(pred,match)
+                  const mostrarEquipoPrediccion =getEquipoPrediccion(pred,match)
                   return (
                     <div key={pred.id} className="prediction-row">
                       <div className="prediction-main">
@@ -507,7 +543,9 @@ export default function PublicTablePage() {
                         <span className={`status-badge ${getStatusBadgeClass(match.status)}`}>
                           {getStatusText(match.status)}
                         </span>
-                        <span className="prediction-value">Pronóstico: {getPredictionText(pred)}  
+                        <span className="prediction-value">Pronóstico: {getPredictionText(pred)} {mostrarEquipoPrediccion !== null ? (
+                          <span className="prediction-value">{mostrarEquipoPrediccion}</span>
+                        ): null}
                           
                         </span>
                         {verdict !== null ? (
