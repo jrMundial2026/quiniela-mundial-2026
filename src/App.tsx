@@ -4,8 +4,8 @@ import AdminPage from './pages/AdminPage'
 import ComparePredictionsPage from './pages/ComparePredictionsPage'
 
 const viewOptions = [
-  { path: '/tabla', label: 'Tabla General' },
-  { path: '/comparar', label: 'Comparación' },
+  { path: '/tabla', label: 'Menu: Tabla General' },
+  { path: '/comparar', label: 'Menu: Comparación' },
 ]
 
 export default function App() {
