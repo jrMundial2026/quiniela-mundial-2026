@@ -711,3 +711,75 @@ body {
     padding: 0.65rem 0.7rem;
   }
 }
+
+.view-selector {
+  flex-shrink: 0;
+}
+
+.view-selector-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.view-selector-control {
+  min-width: 180px;
+  padding: 0.7rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: white;
+
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.view-selector-control option {
+  background: #0f172a;
+  color: white;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.brand {
+  font-size: 1.0rem;
+  font-weight: 700;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.topbar-left {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .view-selector-control {
+    width: auto;
+    min-width: 140px;
+  }
+
+  .brand {
+    font-size: 1rem;
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    line-height: 1.2;
+  }
+}
