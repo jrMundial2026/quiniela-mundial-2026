@@ -337,12 +337,12 @@ export default function ComparePredictionsPage() {
       <div className="card">
         <div className="card-headline">
           <h2>Participantes</h2>
-          <p>Elige dos jugadores para comparar sus pronósticos.</p>
+          <p>Elige dos participantes para comparar sus pronósticos.</p>
         </div>
 
         <div className="row-2" style={{ marginTop: '0.8rem' }}>
           <label>
-            Jugador 1
+            Participante 1
             <select value={selectedLeftPlayerId} onChange={(event) => setSelectedLeftPlayerId(event.target.value)}>
               {visiblePlayers.map((player) => (
                 <option key={player.id} value={player.id}>
@@ -353,7 +353,7 @@ export default function ComparePredictionsPage() {
           </label>
 
           <label>
-            Jugador 2
+            Participante 2
             <select value={selectedRightPlayerId} onChange={(event) => setSelectedRightPlayerId(event.target.value)}>
               {visiblePlayers.map((player) => (
                 <option key={player.id} value={player.id}>
@@ -366,7 +366,7 @@ export default function ComparePredictionsPage() {
 
         {selectedLeftPlayerId && selectedRightPlayerId && selectedLeftPlayerId === selectedRightPlayerId ? (
           <div className="state-box" style={{ marginTop: '0.8rem' }}>
-            Elige dos jugadores diferentes para comparar.
+            Elige dos participantes diferentes para comparar.
           </div>
         ) : null}
       </div>
@@ -403,10 +403,9 @@ export default function ComparePredictionsPage() {
       </div>
 
       <div ref={comparisonListTopRef} className="card" style={{ scrollMarginTop: '140px' }}>
-        <div className="card-headline">
-          <h2>Resultados de la comparación</h2>
-          <p>{leftPlayer?.name ?? 'Jugador 1'} vs {rightPlayer?.name ?? 'Jugador 2'}</p>
-        </div>
+        
+          <h3>{leftPlayer?.name ?? 'Participante 1'} vs {rightPlayer?.name ?? 'Participante 2'}</h3>
+       
 
         <div className="match-list match-list-compact" style={{ marginTop: '0.9rem' }}>
           {selectedLeftPlayerId && selectedRightPlayerId && selectedLeftPlayerId !== selectedRightPlayerId ? (
@@ -441,7 +440,7 @@ export default function ComparePredictionsPage() {
                   <div className="grid-2" style={{ marginTop: '0.9rem' }}>
                     <div className="mini-item">
                       <div>
-                        <strong>{leftPlayer?.name ?? 'Jugador 1'}</strong>
+                        <strong>{leftPlayer?.name ?? 'Participante 1'}</strong>
                         <span>{getPredictionLabel(row.leftPred, row.match)}</span>
                         {leftVerdict ? (
                           <span
@@ -468,7 +467,7 @@ export default function ComparePredictionsPage() {
 
                     <div className="mini-item">
                       <div>
-                        <strong>{rightPlayer?.name ?? 'Jugador 2'}</strong>
+                        <strong>{rightPlayer?.name ?? 'Participante 2'}</strong>
                         <span>{getPredictionLabel(row.rightPred, row.match)}</span>
                         {rightVerdict ? (
                           <span
@@ -499,7 +498,7 @@ export default function ComparePredictionsPage() {
             )
           ) : (
             <div className="empty-row">
-              Selecciona dos jugadores diferentes para ver la comparación.
+              Selecciona dos participantes diferentes para ver la comparación.
             </div>
           )}
         </div>
