@@ -783,3 +783,18 @@ body {
     line-height: 1.2;
   }
 }
+
+.rank-1 {
+  color: #d4af37; /* oro */
+  font-weight: 800;
+}
+
+.rank-2 {
+  color: #c0c0c0; /* plata */
+  font-weight: 800;
+}
+
+.rank-3 {
+  color: #cd7f32; /* bronce */
+  font-weight: 800;
+}

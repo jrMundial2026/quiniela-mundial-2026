@@ -418,7 +418,6 @@ export default function PublicTablePage() {
         <div className="card card-hero">
           <div className="card-headline">
             <h2>Partidos en vivo</h2>
-            <p>Se muestran solo cuando hay encuentros en curso.</p>
           </div>
 
           <div className="match-list match-list-compact">
@@ -472,7 +471,13 @@ export default function PublicTablePage() {
                 ) : (
                   standings.map((row, index) => (
                     <tr key={row.player_id}>
-                      <td className="rank-cell">{index + 1}</td>
+                      <td className="rank-cell">
+  <span className={
+    index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : ''
+  }>
+    {index + 1}
+  </span>
+</td>
                       <td className="player-name-cell">{row.name}</td>
                       <td>{row.correct_results}</td>
                       <td>

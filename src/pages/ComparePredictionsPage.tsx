@@ -324,12 +324,6 @@ export default function ComparePredictionsPage() {
 
   return (
     <section className="panel">
-      <div className="section-header">
-        <div>
-          <h1>Comparar pronósticos</h1>
-          <p>Selecciona dos participantes y revisa en qué partidos coinciden o difieren.</p>
-        </div>
-      </div>
 
       {loading ? <div className="state-box">Cargando datos...</div> : null}
       {error ? <div className="state-box error">{error}</div> : null}
@@ -337,7 +331,7 @@ export default function ComparePredictionsPage() {
       <div className="card">
         <div className="card-headline">
           <h2>Participantes</h2>
-          <p>Elige dos participantes para comparar sus pronósticos.</p>
+          <p>Selecciona dos participantes y revisa en qué partidos coinciden o difieren.</p>
         </div>
 
         <div className="row-2" style={{ marginTop: '0.8rem' }}>
