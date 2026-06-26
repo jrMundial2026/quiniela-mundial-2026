@@ -1,8 +1,216 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { buildStandings, formatMatchScore, getOutcomeLabel } from '../lib/scoring'
 import { WORLD_CUP_GROUPS, isGroupStageRound } from '../lib/worldcup'
 import type { Match, Player, Prediction, StandingRow } from '../types'
+
+
+
+type ConfettiParticle = {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  size: number
+  rotation: number
+  rotationSpeed: number
+  color: string
+  shape: 'circle' | 'square'
+  life: number
+  ttl: number
+}
+
+const winnerConfettiColors = ['#60a5fa', '#22c55e', '#facc15', '#f97316', '#ef4444', '#a855f7', '#f8fafc']
+
+function randomInRange(min: number, max: number) {
+  return Math.random() * (max - min) + min
+}
+
+function WinnerCelebration({ winnerName }: { winnerName: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [isVisible, setIsVisible] = useState(true)
+
+  useEffect(() => {
+    if (winnerName) setIsVisible(true)
+  }, [winnerName])
+
+  useEffect(() => {
+    if (!winnerName || !isVisible) return
+
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) return
+
+    let width = window.innerWidth
+    let height = window.innerHeight
+    let animationFrame = 0
+    let interval: ReturnType<typeof window.setInterval> | null = null
+    const particles: ConfettiParticle[] = []
+    const animationEnd = Date.now() + 15 * 1000
+
+    const resizeCanvas = () => {
+      const dpr = window.devicePixelRatio || 1
+      width = window.innerWidth
+      height = window.innerHeight
+      canvas.width = width * dpr
+      canvas.height = height * dpr
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
+      context.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    const addFirework = (side: 'left' | 'right') => {
+      const fromLeft = side === 'left'
+      const originX = fromLeft ? randomInRange(width * 0.04, width * 0.16) : randomInRange(width * 0.84, width * 0.96)
+      const originY = randomInRange(height * 0.08, height * 0.32)
+      const direction = fromLeft ? 1 : -1
+
+      for (let index = 0; index < 58; index += 1) {
+        particles.push({
+          x: originX,
+          y: originY,
+          vx: direction * randomInRange(2.2, 8.8),
+          vy: randomInRange(-8.5, 4.5),
+          size: randomInRange(3, 8),
+          rotation: randomInRange(0, Math.PI * 2),
+          rotationSpeed: randomInRange(-0.22, 0.22),
+          color: winnerConfettiColors[Math.floor(Math.random() * winnerConfettiColors.length)],
+          shape: Math.random() > 0.5 ? 'circle' : 'square',
+          life: 0,
+          ttl: randomInRange(80, 135),
+        })
+      }
+    }
+
+    const drawParticle = (particle: ConfettiParticle) => {
+      const opacity = Math.max(1 - particle.life / particle.ttl, 0)
+      context.globalAlpha = opacity
+      context.fillStyle = particle.color
+      context.save()
+      context.translate(particle.x, particle.y)
+      context.rotate(particle.rotation)
+
+      if (particle.shape === 'circle') {
+        context.beginPath()
+        context.arc(0, 0, particle.size / 2, 0, Math.PI * 2)
+        context.fill()
+      } else {
+        context.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size)
+      }
+
+      context.restore()
+      context.globalAlpha = 1
+    }
+
+    const tick = () => {
+      context.clearRect(0, 0, width, height)
+
+      for (let index = particles.length - 1; index >= 0; index -= 1) {
+        const particle = particles[index]
+        particle.life += 1
+        particle.x += particle.vx
+        particle.y += particle.vy
+        particle.vy += 0.09
+        particle.vx *= 0.992
+        particle.rotation += particle.rotationSpeed
+
+        drawParticle(particle)
+
+        if (particle.life >= particle.ttl || particle.y > height + 20) {
+          particles.splice(index, 1)
+        }
+      }
+
+      if (Date.now() < animationEnd || particles.length > 0) {
+        animationFrame = window.requestAnimationFrame(tick)
+      }
+    }
+
+    resizeCanvas()
+    addFirework('left')
+    addFirework('right')
+    interval = window.setInterval(() => {
+      if (Date.now() >= animationEnd) {
+        if (interval) window.clearInterval(interval)
+        interval = null
+        return
+      }
+
+      addFirework('left')
+      addFirework('right')
+    }, 450)
+    animationFrame = window.requestAnimationFrame(tick)
+    window.addEventListener('resize', resizeCanvas)
+
+    return () => {
+      if (interval) window.clearInterval(interval)
+      window.cancelAnimationFrame(animationFrame)
+      window.removeEventListener('resize', resizeCanvas)
+    }
+  }, [winnerName, isVisible])
+
+  if (!winnerName || !isVisible) return null
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+        background: 'radial-gradient(circle at top, rgba(59, 130, 246, 0.18), rgba(2, 6, 23, 0.78))',
+        backdropFilter: 'blur(8px)',
+      }}
+      aria-live="polite"
+    >
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'relative',
+          width: 'min(92vw, 560px)',
+          borderRadius: '28px',
+          padding: '2rem',
+          textAlign: 'center',
+          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.88))',
+          border: '1px solid rgba(255, 255, 255, 0.14)',
+          boxShadow: '0 24px 70px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+        }}
+      >
+        <div style={{ fontSize: '4rem', lineHeight: 1 }}>🏆</div>
+        <p style={{ margin: '0.8rem 0 0', color: '#bfdbfe', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Ganador de la quiniela
+        </p>
+        <h2 style={{ margin: '0.6rem 0 0', fontSize: 'clamp(2.2rem, 7vw, 4rem)', color: '#f8fafc', lineHeight: 1 }}>
+          Felicidades {winnerName}
+        </h2>
+        <p style={{ margin: '0.9rem auto 0', maxWidth: '36rem', color: '#cbd5e1', fontSize: '1rem' }}>
+          ¡Campeón de la Quiniela del Mundial!
+        </p>
+        <button
+          type="button"
+          className="ghost-button"
+          style={{ marginTop: '1.5rem' }}
+          onClick={() => setIsVisible(false)}
+        >
+          Cerrar
+        </button>
+      </div>
+    </div>
+  )
+}
 
 const statusLabel: Record<string, string> = {
   scheduled: 'Pendiente',
@@ -131,6 +339,57 @@ function getLocalDateKey(value: string | null) {
   return new Date(value).toLocaleDateString('en-CA')
 }
 
+function isPendingOrLiveMatch(match: Match) {
+  const status = (match.status ?? 'scheduled').toLowerCase()
+  return status === 'scheduled' || status === 'live' || status === 'in_play'
+}
+
+type VictoryPathStatus =
+  | 'leader'
+  | 'can_overtake'
+  | 'can_tie'
+  | 'ties_current_leader'
+  | 'needs_combination'
+  | 'out_of_reach'
+
+function getVictoryPathStatusLabel(status: VictoryPathStatus) {
+  switch (status) {
+    case 'leader':
+      return 'Líder actual'
+    case 'can_overtake':
+      return 'Puede Ganar'
+    case 'can_tie':
+      return 'Puede empatar al líder'
+    case 'ties_current_leader':
+      return 'Ya no le alcanza'
+    case 'needs_combination':
+      return 'Ya no le alcanza'
+    case 'out_of_reach':
+      return 'Ya no le alcanza'
+    default:
+      return ''
+  }
+}
+
+function getVictoryPathStatusClass(status: VictoryPathStatus) {
+  switch (status) {
+    case 'leader':
+      return 'status-leader'
+    case 'can_overtake':
+      return 'status-live'
+    case 'can_tie':
+      return 'status-cantie'
+    case 'ties_current_leader':
+      return 'status-scheduled'
+    case 'needs_combination':
+      return 'status-scheduled'
+    case 'out_of_reach':
+      return 'status-cancelled'
+    default:
+      return 'status-scheduled'
+  }
+}
+
 export default function PublicTablePage() {
   const [players, setPlayers] = useState<Player[]>([])
   const [matches, setMatches] = useState<Match[]>([])
@@ -140,6 +399,8 @@ export default function PublicTablePage() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<(typeof WORLD_CUP_GROUPS)[number]>('A')
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false)
+  const [isVictoryPathModalOpen, setIsVictoryPathModalOpen] = useState(false)
+  const [winnerName, setWinnerName] = useState('')
 
   const openGroupModal = () => {
     setIsGroupModalOpen(true)
@@ -149,6 +410,18 @@ export default function PublicTablePage() {
   const closeGroupModal = () => {
     setIsGroupModalOpen(false)
     if (window.history.state?.modal === 'group') {
+      window.history.back()
+    }
+  }
+
+  const openVictoryPathModal = () => {
+    setIsVictoryPathModalOpen(true)
+    window.history.pushState({ modal: 'victoryPath' }, '')
+  }
+
+  const closeVictoryPathModal = () => {
+    setIsVictoryPathModalOpen(false)
+    if (window.history.state?.modal === 'victoryPath') {
       window.history.back()
     }
   }
@@ -169,10 +442,11 @@ export default function PublicTablePage() {
     setLoading(true)
     setError(null)
 
-    const [playersRes, matchesRes, predictionsRes] = await Promise.all([
+    const [playersRes, matchesRes, predictionsRes, winnerRes] = await Promise.all([
       supabase.from('players').select('*').range(0,5000).order('name', { ascending: true }),
       supabase.from('matches').select('*').range(0,5000).order('kickoff_at', { ascending: false, nullsFirst: false }),
       supabase.from('predictions').select('*').range(0,5000),
+      supabase.from('app_settings').select('value').eq('key', 'winner_name').maybeSingle(),
     ])
 
     if (playersRes.error || matchesRes.error || predictionsRes.error) {
@@ -183,6 +457,14 @@ export default function PublicTablePage() {
       setPlayers((playersRes.data as Player[]) ?? [])
       setMatches((matchesRes.data as Match[]) ?? [])
       setPredictions((predictionsRes.data as Prediction[]) ?? [])
+
+      const rawWinnerName = ((winnerRes.data as { value?: string } | null)?.value ?? '').trim()
+
+      setWinnerName(
+        rawWinnerName && rawWinnerName.toUpperCase() !== 'SIN_GANADOR'
+          ? rawWinnerName
+          : ''
+      )
     }
 
     setLoading(false)
@@ -196,6 +478,7 @@ export default function PublicTablePage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, loadData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, loadData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions' }, loadData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, loadData)
       .subscribe()
 
     return () => {
@@ -204,13 +487,18 @@ export default function PublicTablePage() {
   }, [])
 
   useEffect(() => {
-    if (!isGroupModalOpen && !selectedPlayerId) return
+    if (!isGroupModalOpen && !selectedPlayerId && !isVictoryPathModalOpen) return
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
 
       if (selectedPlayerId) {
         closePlayerModal()
+        return
+      }
+
+      if (isVictoryPathModalOpen) {
+        closeVictoryPathModal()
         return
       }
 
@@ -221,12 +509,17 @@ export default function PublicTablePage() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isGroupModalOpen, selectedPlayerId])
+  }, [isGroupModalOpen, selectedPlayerId, isVictoryPathModalOpen])
 
   useEffect(() => {
     const onPopState = () => {
       if (selectedPlayerId) {
         setSelectedPlayerId(null)
+        return
+      }
+
+      if (isVictoryPathModalOpen) {
+        setIsVictoryPathModalOpen(false)
         return
       }
 
@@ -237,11 +530,119 @@ export default function PublicTablePage() {
 
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [isGroupModalOpen, selectedPlayerId])
+  }, [isGroupModalOpen, selectedPlayerId, isVictoryPathModalOpen])
 
   const standings = useMemo<StandingRow[]>(() => buildStandings(players, matches, predictions), [players, matches, predictions])
 
   const matchById = useMemo(() => new Map(matches.map((match) => [match.id, match] as const)), [matches])
+
+  const predictionsByPlayerAndMatch = useMemo(() => {
+    const map = new Map<string, Map<string, Prediction>>()
+
+    for (const pred of predictions) {
+      const playerMap = map.get(pred.player_id) ?? new Map<string, Prediction>()
+      playerMap.set(pred.match_id, pred)
+      map.set(pred.player_id, playerMap)
+    }
+
+    return map
+  }, [predictions])
+
+  const victoryPathRows = useMemo(() => {
+    const leader = standings[0]
+    if (!leader) return [] as Array<{
+      player_id: string
+      name: string
+      rank: number
+      currentHits: number
+      gap: number
+      samePending: number
+      differentPending: number
+      missingPending: number
+      maxReach: number
+      canCatch: boolean
+      pathStatus: VictoryPathStatus
+      isLeader: boolean
+    }>
+
+    const leaderPredictions = predictionsByPlayerAndMatch.get(leader.player_id) ?? new Map<string, Prediction>()
+
+    return standings.map((row, index) => {
+      if (row.player_id === leader.player_id) {
+        return {
+          player_id: row.player_id,
+          name: row.name,
+          rank: index + 1,
+          currentHits: row.correct_results,
+          gap: 0,
+          samePending: 0,
+          differentPending: 0,
+          missingPending: 0,
+          maxReach: row.correct_results,
+          canCatch: true,
+          pathStatus: 'leader' as VictoryPathStatus,
+          isLeader: true,
+        }
+      }
+
+      const playerPredictions = predictionsByPlayerAndMatch.get(row.player_id) ?? new Map<string, Prediction>()
+      let samePending = 0
+      let differentPending = 0
+      let missingPending = 0
+
+      for (const match of matches) {
+        if (!isPendingOrLiveMatch(match)) continue
+
+        const leaderPred = leaderPredictions.get(match.id)
+        const playerPred = playerPredictions.get(match.id)
+        const leaderOutcome = leaderPred ? getPredictionOutcome(leaderPred) : null
+        const playerOutcome = playerPred ? getPredictionOutcome(playerPred) : null
+
+        if (!leaderOutcome || !playerOutcome) {
+          missingPending += 1
+          continue
+        }
+
+        if (leaderOutcome === playerOutcome) {
+          samePending += 1
+        } else {
+          differentPending += 1
+        }
+      }
+
+      const gap = Math.max(leader.correct_results - row.correct_results, 0)
+      const maxReach = row.correct_results + samePending + differentPending
+
+      let pathStatus: VictoryPathStatus = 'needs_combination'
+
+      if (maxReach < leader.correct_results) {
+        pathStatus = 'out_of_reach'
+      } else if (maxReach === leader.correct_results) {
+        pathStatus = 'ties_current_leader'
+      } else if (differentPending > gap) {
+        pathStatus = 'can_overtake'
+      } else if (differentPending === gap) {
+        pathStatus = 'can_tie'
+      }
+
+      return {
+        player_id: row.player_id,
+        name: row.name,
+        rank: index + 1,
+        currentHits: row.correct_results,
+        gap,
+        samePending,
+        differentPending,
+        missingPending,
+        maxReach,
+        canCatch: differentPending >= gap,
+        pathStatus,
+        isLeader: false,
+      }
+    })
+  }, [standings, predictionsByPlayerAndMatch, matches])
+
+  const leaderName = standings[0]?.name ?? 'primer lugar'
 
   const selectedPlayer = useMemo(
     () => players.find((player) => player.id === selectedPlayerId) ?? null,
@@ -309,6 +710,78 @@ export default function PublicTablePage() {
         .sort((a, b) => new Date(a.kickoff_at ?? 0).getTime() - new Date(b.kickoff_at ?? 0).getTime())
     },
     [matches]
+  )
+
+  const victoryPathModalBody = (
+    <div className="modal-card group-modal-card" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-header">
+        <div>
+          <h3>Posibilidad de victoria</h3>
+          {/* <p>Comparativo contra {leaderName}. Solo se consideran partidos pendientes o en vivo.</p> */}
+          <p>Comparativo contra el líder actual. Solo se consideran partidos pendientes o en vivo.</p>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="ghost-button" onClick={closeVictoryPathModal}>
+            Cerrar
+          </button>
+        </div>
+      </div>
+
+      <div className="match-section">
+        <div className="table-wrap table-strong" style={{ marginTop: '0.9rem' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Participante</th>
+                <th>Aciertos</th>
+                <th>Por remontar</th>
+                <th>Iguales vs líder</th>
+                <th>Diferentes vs líder</th>
+                <th>Posibilidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {victoryPathRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="empty-row">Todavía no hay datos.</td>
+                </tr>
+              ) : (
+                victoryPathRows.map((row) => (
+                  <tr
+                    key={row.player_id}
+                    style={row.rank === 1 ? { background: 'rgba(212, 175, 55, 0.10)' } : row.rank === 2 ? { background: 'rgba(187, 194, 204, 0.10)' } : row.rank === 3 ? { background: 'rgba(205, 127, 50, 0.10)' } : undefined}
+                  >
+                    <td className="rank-cell">
+  <span className={
+    row.rank === 1 ? 'rank-1' : row.rank === 2 ? 'rank-2' : row.rank === 3 ? 'rank-3' : ''
+  }>
+    {row.rank}
+  </span>
+</td>
+                    <td className="player-name-cell">{row.name}</td>
+                    <td>{row.currentHits}</td>
+                    <td>{row.isLeader ? '-' : row.gap}</td>
+                    <td>{row.isLeader ? '-' : row.samePending}</td>
+                    <td>{row.isLeader ? '-' : row.differentPending}</td>
+                    <td>
+                      <span className={`status-badge ${getVictoryPathStatusClass(row.pathStatus)}`}>
+                        {getVictoryPathStatusLabel(row.pathStatus)}
+                      </span>
+                      {!row.isLeader && row.missingPending > 0 ? (
+                        <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.75 }}>
+                          Sin comparar: {row.missingPending}
+                        </span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   )
 
   const groupModalBody = (
@@ -395,18 +868,26 @@ export default function PublicTablePage() {
 
   return (
     <section className="panel">
+      {winnerName ? <WinnerCelebration winnerName={winnerName} /> : null}
       <div className="section-header">
         <div>
           <h1>Tabla general</h1>
           <p>Se actualiza en tiempo real, cuando haya partidos en vivo, los aciertos cambian conforme el marcador!</p>
         </div>
-        <div className="section-actions">
+        <div className="section-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
           <button
             type="button"
             className="ghost-button group-open-button"
             onClick={openGroupModal}
           >
             Ver resultados y proximos partidos por grupo
+          </button>
+          <button
+            type="button"
+            className="ghost-button group-open-button"
+            onClick={openVictoryPathModal}
+          >
+            Posibilidad de Victoria
           </button>
         </div>
       </div>
@@ -470,7 +951,10 @@ export default function PublicTablePage() {
                   </tr>
                 ) : (
                   standings.map((row, index) => (
-                    <tr key={row.player_id}>
+                    <tr
+                    key={row.player_id}
+                    style={index === 0 ? { background: 'rgba(212, 175, 55, 0.10)' } : index === 1 ? { background: 'rgba(187, 194, 204, 0.10)' } : index === 2 ? { background: 'rgba(205, 127, 50, 0.10)' } : undefined}
+                  >
                       <td className="rank-cell">
   <span className={
     index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : ''
@@ -502,6 +986,12 @@ export default function PublicTablePage() {
       {isGroupModalOpen ? (
         <div className="modal-backdrop" onClick={closeGroupModal}>
           {groupModalBody}
+        </div>
+      ) : null}
+
+      {isVictoryPathModalOpen ? (
+        <div className="modal-backdrop" onClick={closeVictoryPathModal}>
+          {victoryPathModalBody}
         </div>
       ) : null}
 
