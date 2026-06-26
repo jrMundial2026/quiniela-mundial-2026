@@ -871,7 +871,7 @@ export default function PublicTablePage() {
       {winnerName ? <WinnerCelebration winnerName={winnerName} /> : null}
       <div className="section-header">
         <div>
-          <h1>Tabla general</h1>
+          <h1>Tabla genera</h1>
           <p>Se actualiza en tiempo real, cuando haya partidos en vivo, los aciertos cambian conforme el marcador!</p>
         </div>
         <div className="section-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
