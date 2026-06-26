@@ -31,6 +31,10 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_APP_VERSION: ${{ github.sha }}
+
+      - name: Write app version
+        run: echo '{"version":"${{ github.sha }}"}' > dist/version.json
 
       - uses: actions/upload-pages-artifact@v3
         with:
