@@ -2,6 +2,8 @@
 
 Panel para tabla pública y administración.
 
+Ver en linea -> https://jrmundial2026.github.io/quiniela-mundial-2026/#/tabla
+
 ## Pronósticos
 
 En esta versión los pronósticos se capturan como resultado simple:
